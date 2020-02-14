@@ -32,6 +32,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -724,6 +725,7 @@ func (l *LibvirtDomainManager) PrepareMigrationTarget(vmi *v1.VirtualMachineInst
 	}
 	// Map the VirtualMachineInstance to the Domain
 	c := &api.ConverterContext{
+		Architecture:      runtime.GOARCH,
 		VirtualMachine:    vmi,
 		UseEmulation:      useEmulation,
 		CPUSet:            podCPUSet,
@@ -1059,6 +1061,7 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, useEmulat
 
 	// Map the VirtualMachineInstance to the Domain
 	c := &api.ConverterContext{
+		Architecture:      runtime.GOARCH,
 		VirtualMachine:    vmi,
 		UseEmulation:      useEmulation,
 		CPUSet:            podCPUSet,
@@ -1079,7 +1082,7 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, useEmulat
 	}
 
 	// Set defaults which are not coming from the cluster
-	api.SetObjectDefaults_Domain(domain)
+	api.NewDefaulter(c.Architecture).SetObjectDefaults_Domain(domain)
 
 	dom, err := l.virConn.LookupDomainByName(domain.Spec.Name)
 	newDomain := false
