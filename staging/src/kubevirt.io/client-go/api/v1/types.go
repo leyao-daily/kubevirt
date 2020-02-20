@@ -1207,3 +1207,10 @@ type VirtualMachineInstanceFileSystem struct {
 	UsedBytes      int    `json:"usedBytes"`
 	TotalBytes     int    `json:"totalBytes"`
 }
+
+// Options for a rename operation
+type RenameOptions struct {
+	metav1.TypeMeta `json:",inline"`
+	NewName         string  `json:"newName"`
+	OldName         *string `json:"oldName,omitempty"`
+}
