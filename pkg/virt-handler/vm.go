@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -1156,7 +1157,7 @@ func (d *VirtualMachineController) closeLauncherClient(vmi *v1.VirtualMachineIns
 	d.launcherClientLock.Lock()
 	defer d.launcherClientLock.Unlock()
 
-	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()))
+	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()), true)
 
 	client, ok := d.launcherClients[sockFile]
 	if ok == false {
@@ -1167,6 +1168,7 @@ func (d *VirtualMachineController) closeLauncherClient(vmi *v1.VirtualMachineIns
 	delete(d.launcherClients, sockFile)
 
 	os.RemoveAll(sockFile)
+	os.RemoveAll(filepath.Dir(sockFile))
 }
 
 // used by unit tests to add mock clients
@@ -1185,7 +1187,7 @@ func (d *VirtualMachineController) getLauncherClient(vmi *v1.VirtualMachineInsta
 	d.launcherClientLock.Lock()
 	defer d.launcherClientLock.Unlock()
 
-	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()))
+	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()), true)
 
 	client, ok := d.launcherClients[sockFile]
 	if ok {
@@ -1307,7 +1309,7 @@ func (d *VirtualMachineController) removeStaleClientConnections(vmi *v1.VirtualM
 	// maps require locks for concurrent access
 	d.launcherClientLock.Lock()
 	defer d.launcherClientLock.Unlock()
-	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()))
+	sockFile := cmdclient.SocketFromUID(d.virtShareDir, string(vmi.GetUID()), true)
 
 	client, ok := d.launcherClients[sockFile]
 	if !ok {
