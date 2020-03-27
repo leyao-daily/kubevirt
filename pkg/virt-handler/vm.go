@@ -58,6 +58,7 @@ import (
 	clusterutils "kubevirt.io/kubevirt/pkg/util/cluster"
 	pvcutils "kubevirt.io/kubevirt/pkg/util/types"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
+	virtcache "kubevirt.io/kubevirt/pkg/virt-handler/cache"
 	cmdclient "kubevirt.io/kubevirt/pkg/virt-handler/cmd-client"
 	device_manager "kubevirt.io/kubevirt/pkg/virt-handler/device-manager"
 	"kubevirt.io/kubevirt/pkg/virt-handler/isolation"
@@ -79,6 +80,7 @@ func NewController(
 	host string,
 	ipAddress string,
 	virtShareDir string,
+	virtPrivateDir string,
 	vmiSourceInformer cache.SharedIndexInformer,
 	vmiTargetInformer cache.SharedIndexInformer,
 	domainInformer cache.SharedInformer,
@@ -110,7 +112,7 @@ func NewController(
 		podIsolationDetector:     podIsolationDetector,
 		containerDiskMounter: &container_disk.Mounter{
 			PodIsolationDetector: podIsolationDetector,
-			MountStateDir:        virtShareDir + "-private/container-disk-mount-state"},
+			MountStateDir:        virtPrivateDir + "/container-disk-mount-state"},
 		clusterConfig: clusterConfig,
 	}
 
@@ -154,6 +156,7 @@ type VirtualMachineController struct {
 	host                     string
 	ipAddress                string
 	virtShareDir             string
+	virtPrivateDir           string
 	Queue                    workqueue.RateLimitingInterface
 	vmiSourceInformer        cache.SharedIndexInformer
 	vmiTargetInformer        cache.SharedIndexInformer
@@ -803,6 +806,8 @@ func (d *VirtualMachineController) getDomainFromCache(key string) (domain *api.D
 		domain = obj.(*api.Domain)
 		cachedUID = domain.Spec.Metadata.KubeVirt.UID
 
+		// We're using the DeletionTimestamp to signify that the
+		// Domain is deleted rather than sending the DELETE watch event.
 		if domain.ObjectMeta.DeletionTimestamp != nil {
 			exists = false
 			domain = nil
@@ -1188,15 +1193,19 @@ func (d *VirtualMachineController) execute(key string) error {
 	}
 
 	// As a last effort, if the UID still can't be determined attempt
-	// to retrieve it from the cmdclient socket information cache
+	// to retrieve it from the ghost record
 	if string(vmi.UID) == "" {
-		uid, err := cmdclient.FindLastKnownUIDForKey(vmi.Name, vmi.Namespace)
-		if err != nil {
-			return err
-		}
+		uid := virtcache.LastKnownUIDFromGhostRecordCache(key)
 		if uid != "" {
-			log.Log.Object(vmi).V(3).Infof("cmdclient cache provided %s as UID", uid)
-			vmi.UID = types.UID(uid)
+			log.Log.Object(vmi).V(3).Infof("ghost record cache provided %s as UID", uid)
+			vmi.UID = uid
+		} else {
+			// legacy support, attempt to find UID from watchdog file it exists.
+			uid := watchdog.WatchdogFileGetUID(d.virtShareDir, vmi)
+			if uid != "" {
+				log.Log.Object(vmi).V(3).Infof("watchdog file provided %s as UID", uid)
+				vmi.UID = types.UID(uid)
+			}
 		}
 	}
 	if vmiExists && domainExists && domain.Spec.Metadata.KubeVirt.UID != vmi.UID {
@@ -1327,6 +1336,8 @@ func (d *VirtualMachineController) closeLauncherClient(vmi *v1.VirtualMachineIns
 		return err
 	}
 
+	virtcache.DeleteGhostRecord(vmi.Namespace, vmi.Name)
+
 	delete(d.launcherClients, vmi.UID)
 	return nil
 }
@@ -1392,6 +1403,11 @@ func (d *VirtualMachineController) getLauncherClient(vmi *v1.VirtualMachineInsta
 	}
 
 	socketFile, err := cmdclient.FindSocketOnHost(vmi)
+	if err != nil {
+		return nil, err
+	}
+
+	err = virtcache.AddGhostRecord(vmi.Namespace, vmi.Name, socketFile, vmi.UID)
 	if err != nil {
 		return nil, err
 	}
