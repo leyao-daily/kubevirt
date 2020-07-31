@@ -72,6 +72,7 @@ type ConverterContext struct {
 	SMBios            *cmdv1.SMBios
 	GpuDevices        []string
 	VgpuDevices       []string
+	QATDevices        []string
 	EmulatorThreadCpu *int
 	OVMFPath          string
 }
@@ -1059,6 +1060,17 @@ func Convert_v1_VirtualMachine_To_api_Domain(vmi *v1.VirtualMachineInstance, dom
 		}
 		gpuPCIAddresses := append([]string{}, c.GpuDevices...)
 		hostDevices, err = createHostDevicesFromPCIAddresses(gpuPCIAddresses)
+		if err != nil {
+			log.Log.Reason(err).Error("Unable to parse PCI addresses")
+		} else {
+			domain.Spec.Devices.HostDevices = append(domain.Spec.Devices.HostDevices, hostDevices...)
+		}
+	}
+
+	// Append HostDev to libvirt DomXML if QAT is required
+	if util.IsQATVMI(vmi) {
+		qatPCIAddresses := append([]string{}, c.QATDevices...)
+		hostDevices, err := createHostDevicesFromPCIAddresses(qatPCIAddresses)
 		if err != nil {
 			log.Log.Reason(err).Error("Unable to parse PCI addresses")
 		} else {
