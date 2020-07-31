@@ -31,6 +31,7 @@ const (
 	HypervStrictCheckGate = "HypervStrictCheck"
 	SidecarGate           = "Sidecar"
 	GPUGate               = "GPU"
+	QATGate               = "QAT"
 	SnapshotGate          = "Snapshot"
 	HostDiskGate          = "HostDisk"
 )
@@ -71,6 +72,9 @@ func (config *ClusterConfig) SidecarEnabled() bool {
 func (config *ClusterConfig) GPUPassthroughEnabled() bool {
 	return config.isFeatureGateEnabled(GPUGate)
 }
+
+func (config *ClusterConfig) QATPassthroughEnabled() bool {
+	return config.isFeatureGateEnabled(QATGate)
 
 func (config *ClusterConfig) SnapshotEnabled() bool {
 	return config.isFeatureGateEnabled(SnapshotGate)
